@@ -16,7 +16,9 @@ static NSString* const kStoreChangedEvent = @"iCloudStoreDidChangeRemotely";
 static NSString* const kChangedKeys = @"changedKeys";
 
 @implementation iCloudStorage
-
++ (BOOL)requiresMainQueueSetup {
+    return YES;
+}
 + (NSString*)appendPrefixToKey:(NSString*)key {
   return [NSString stringWithFormat:@"%@%@", ICLOUDSTORAGE_PREFIX, key];
 }
@@ -118,15 +120,6 @@ static NSString* const kChangedKeys = @"changedKeys";
   return self;
 }
 
-+(BOOL)requiresMainQueueSetup {
-    return YES;
-}
-
-- (dispatch_queue_t)methodQueue
-{
-    return dispatch_get_main_queue();
-}
-
 - (NSArray<NSString *> *)supportedEvents {
   return @[ kStoreChangedEvent ];
 }
@@ -185,7 +178,18 @@ RCT_EXPORT_METHOD(mergeItem: (NSString*)key value: (NSString*)value resolver:(RC
   
   resolve(@{});
 }
-
+// Add this method
+RCT_EXPORT_METHOD(isICloudAvailable:(RCTPromiseResolveBlock)resolve
+                          rejecter:(RCTPromiseRejectBlock)reject) {
+    @try {
+        NSURL *iCloudURL = [[NSFileManager defaultManager] URLForUbiquityContainerIdentifier:nil];
+        BOOL isAvailable = (iCloudURL != nil);
+        resolve(@(isAvailable));
+    }
+    @catch (NSException *exception) {
+        reject(@"icloud_error", @"Could not check iCloud availability", nil);
+    }
+}
 RCT_REMAP_METHOD(clear, clearResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
   for (NSString* key in [iCloudStorage allKeysInStore]) {
@@ -216,19 +220,18 @@ RCT_EXPORT_METHOD(multiGet: (NSArray*)keys resolver:(RCTPromiseResolveBlock)reso
   NSMutableArray *result = [NSMutableArray arrayWithCapacity:[keys count]];
   for (NSString* key in keys) {
     NSObject* object = [iCloudStorage getObjectForKey:key];
-    if (object == nil) {
-      object = [NSNull null];
+    if (object != nil) {
+      [result addObject:object];
     }
-    [result addObject:@[key, object]];
   }
   
   resolve(result);
 }
 
-RCT_EXPORT_METHOD(multiSet: (NSArray<NSArray<NSString *> *> *)keyValuePairs resolver:(RCTPromiseResolveBlock)resolve
+RCT_EXPORT_METHOD(multiSet: (NSDictionary*)keyValuePairs resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
-  for (NSArray<NSString *> *entry in keyValuePairs) {
-    [iCloudStorage setValue:entry[1] forKey:entry[0]];
+  for (NSString* key in [keyValuePairs allKeys]) {
+    [iCloudStorage setValue:[keyValuePairs objectForKey:key] forKey:key];
   }
   resolve(@{});
 }
